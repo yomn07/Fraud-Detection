@@ -21,7 +21,7 @@ WINDOW = "1 minute"
 WATERMARK = "30 seconds"
 
 # Alert if MORE than N transactions for one account in one window.
-N = 5
+N = 10
 
 # "latest" ignores old messages, "earliest" replays the whole topic.
 STARTING_OFFSETS = "latest"
