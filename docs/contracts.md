@@ -51,29 +51,32 @@ Written by B's Spark jobs, read by C's writer.
 | `type` | string or null | `TRANSFER` or `CASH_OUT` |
 | `amount` | double | Transaction amount (for `VELOCITY`: sum of amounts in the window) |
 | `step` | integer or null | PaySim time step |
-| `event_time` | string | ISO 8601 timestamp written by Spark (for `VELOCITY`: end of the window) |
+| `event_time` | string | ISO 8601 in UTC with milliseconds and a `Z` suffix, as written by Spark (for `VELOCITY`: end of the window) |
 | `isFraud` | integer | Real label, kept only for evaluation (for `VELOCITY`: maximum in the window) |
 | `tx_count` | integer, only in `VELOCITY` | Number of transactions in the window |
+| `counted_by` | string, only in `VELOCITY` (proposed) | Which column was counted: `nameDest` |
 
 Rules:
 
 | `rule` | Condition |
 |---|---|
 | `ACCOUNT_DRAIN` | `type` is `TRANSFER` or `CASH_OUT`, `newbalanceOrig` = 0 and `amount` = `oldbalanceOrg` |
-| `LARGE_AMOUNT` | `type` is `TRANSFER` or `CASH_OUT` and `amount` above the threshold (start at 200000) |
-| `VELOCITY` | More than N transactions for one account inside a window (start at 1 minute) |
+| `LARGE_AMOUNT` | `type` is `TRANSFER` or `CASH_OUT` and `amount` above the threshold (start at 200000, tune with the evaluation) |
+| `VELOCITY` | More than N transactions to the same destination account inside a window (start at 1 minute) |
 
 A transaction matching two rules produces two alerts.
 
 Example:
 
 ```json
-{"rule":"ACCOUNT_DRAIN","nameOrig":"C1305486145","nameDest":"C553264065","type":"TRANSFER","amount":181.0,"step":1,"event_time":"2026-10-31T15:14:59.099+00:00","isFraud":1}
+{"rule":"ACCOUNT_DRAIN","nameOrig":"C1305486145","nameDest":"C553264065","type":"TRANSFER","amount":181.0,"step":1,"event_time":"2026-10-31T17:10:21.181Z","isFraud":1}
 ```
 
-**To confirm:** the exact `event_time` format that Spark's `to_json` produces. Read it from the first real alert, then replace the example above and tell C.
+**Confirmed by B from a real alert:** `event_time` looks like `2026-10-31T17:10:21.181Z`. Python format: `%Y-%m-%dT%H:%M:%S.%fZ`, read as UTC.
 
-**To agree between B and C:** the `VELOCITY` layout above (nulls in `nameDest`, `type`, `step`, extra `tx_count`).
+**Why velocity counts by destination:** MapReduce job 2 on the full file shows that senders almost never repeat (6,353,307 distinct senders, maximum 3 transactions each), while destinations do (2,722,362 distinct, maximum 113). A rule counting per sender would never fire.
+
+**To agree between B and C:** the `VELOCITY` layout. Proposal: the counted destination account goes in `nameOrig` (so the alert key and the HBase keys work unchanged), `counted_by` is `nameDest`, `nameDest`, `type` and `step` are null, and the writer accepts nulls.
 
 ## 5. HBase
 
@@ -81,12 +84,28 @@ Both tables have one column family `d`. All values are stored as strings.
 
 | Table | Row key |
 |---|---|
-| `alerts_by_account` | `nameOrig` + `_` + reversed timestamp |
+| `alerts_by_account` | `nameOrig` + `_` + reversed timestamp + `_` + `rule` (proposed, see below) |
 | `alerts_recent` | reversed timestamp + `_` + `nameOrig` + `_` + `rule` |
 
 Reversed timestamp = `9223372036854775807 - epoch_milliseconds`, written as a 19-digit string. The newest alert gets the smallest number, so it sorts first in a range scan.
 
-Columns in family `d`: `rule`, `nameDest`, `type`, `amount`, `step`, `event_time`, `isFraud`, and `tx_count` for velocity alerts.
+**Proposed change for `alerts_by_account`:** one transaction can match two rules and produce two alerts with the same `nameOrig` and the same `event_time`. With the key `nameOrig_reversedTimestamp`, the second write would overwrite the first. Adding `rule` at the end of the key avoids this, and a prefix scan on the account still works. To be approved by C.
+
+Python helper for the reversed timestamp (compatible with Python 3.5):
+
+```python
+import calendar
+from datetime import datetime
+
+def to_epoch_ms(s):
+    dt = datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
+    return calendar.timegm(dt.timetuple()) * 1000 + dt.microsecond // 1000
+
+def reversed_ts(s):
+    return str(9223372036854775807 - to_epoch_ms(s)).zfill(19)
+```
+
+Columns in family `d`: `rule`, `nameDest`, `type`, `amount`, `step`, `event_time`, `isFraud`, and for velocity alerts `tx_count` and `counted_by`.
 
 ## 6. HDFS paths
 
@@ -96,5 +115,14 @@ Columns in family `d`: `rule`, `nameDest`, `type`, `amount`, `step`, `event_time
 | `/fraud/raw` | Parquet archive of all transactions | B |
 | `/fraud/checkpoints/archive` | Checkpoint of the archive job | B |
 | `/fraud/checkpoints/rules` | Checkpoint of the rules job | B |
-| `/fraud/output/type_stats` | MapReduce job 1 result | A |
-| `/fraud/output/account_counts` | MapReduce job 2 result | A |
+| `/fraud/output/type_stats` | MapReduce job 1: count, frauds and amounts per transaction type | A |
+| `/fraud/output/orig_counts` | MapReduce job 2: transactions per sender account | A |
+| `/fraud/output/dest_counts` | MapReduce job 2: transactions per destination account | A |
+
+## 7. Open points
+
+| Point | Owners | Status |
+|---|---|---|
+| `VELOCITY` alert layout | B and C | Proposed above |
+| `rule` added to the `alerts_by_account` row key | C | Proposed above |
+| Threshold of `LARGE_AMOUNT` | B and C | To tune from the evaluation, 200000 is only a start |
