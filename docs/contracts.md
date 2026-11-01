@@ -51,7 +51,7 @@ Written by B's Spark jobs, read by C's writer.
 | `type` | string or null | `TRANSFER` or `CASH_OUT` |
 | `amount` | double | Transaction amount (for `VELOCITY`: sum of amounts in the window) |
 | `step` | integer or null | PaySim time step |
-| `event_time` | string | ISO 8601 timestamp written by Spark (for `VELOCITY`: end of the window) |
+| `event_time` | string `yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`, UTC | Timestamp written by Spark, for example `2026-10-31T17:10:21.181Z` (for `VELOCITY`: end of the window) |
 | `isFraud` | integer | Real label, kept only for evaluation (for `VELOCITY`: maximum in the window) |
 | `tx_count` | integer, only in `VELOCITY` | Number of transactions in the window |
 
@@ -68,10 +68,11 @@ A transaction matching two rules produces two alerts.
 Example:
 
 ```json
-{"rule":"ACCOUNT_DRAIN","nameOrig":"C1305486145","nameDest":"C553264065","type":"TRANSFER","amount":181.0,"step":1,"event_time":"2026-10-31T15:14:59.099+00:00","isFraud":1}
+{"rule":"ACCOUNT_DRAIN","nameOrig":"C1305486145","nameDest":"C553264065","type":"TRANSFER","amount":181.0,"step":1,"event_time":"2026-10-31T15:10:21.181Z","isFraud":1}
 ```
 
-**To confirm:** the exact `event_time` format that Spark's `to_json` produces. Read it from the first real alert, then replace the example above and tell C.
+**To confirm:** the exact `event_time` format that Spark's `to_json` produces. Read it from the first real alert, then replace the example above and tell C. 
+--> **Confirmed:** `event_time` in alerts is the ISO 8601 UTC format produced by Spark's `to_json`, with milliseconds and a `Z` suffix (`2026-10-31T17:10:21.181Z`), read from the first real alerts on 2026-10-31. It is different from the transaction `event_time` (section 3), which has a space and microseconds. C parses it with the pattern `yyyy-MM-dd'T'HH:mm:ss.SSS'Z'` before computing the reversed timestamp. To be re-checked on the first `VELOCITY` alert.
 
 **To agree between B and C:** the `VELOCITY` layout above (nulls in `nameDest`, `type`, `step`, extra `tx_count`).
 
