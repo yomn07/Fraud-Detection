@@ -3,7 +3,7 @@ from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import (StructType, StructField, StringType,
                                IntegerType, DoubleType)
 
-spark = SparkSession.builder.appName("FraudArchive").getOrCreate()
+spark = SparkSession.builder.appName("FraudArchive").config("spark.sql.session.timeZone", "UTC").getOrCreate()
 spark.sparkContext.setLogLevel("WARN")
 
 schema = StructType([
