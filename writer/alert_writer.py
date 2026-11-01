@@ -7,7 +7,6 @@ Formats and row keys follow docs/contracts.md.
 Usage:
     python3 alert_writer.py
     python3 alert_writer.py --idle-timeout 10      # stop after 10 s without messages
-    python3 alert_writer.py --rule-in-key          # add the rule to the alerts_by_account key
 """
 import argparse
 import calendar
@@ -26,7 +25,7 @@ EVENT_TIME_FORMATS = ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"]
 
 # Columns of family d. Values that are None are NOT written (see build_columns).
 COLUMNS = ["rule", "nameDest", "type", "amount", "step",
-           "event_time", "isFraud", "tx_count"]
+           "event_time", "isFraud", "tx_count", "counted_by"]
 
 
 def parse_event_time(value):
@@ -49,17 +48,19 @@ def reversed_timestamp(epoch_ms):
     return "{:019d}".format(MAX_LONG - epoch_ms)
 
 
-def build_row_keys(alert, rule_in_key=False):
-    """Return (row key for alerts_by_account, row key for alerts_recent)."""
+def build_row_keys(alert):
+    """Return (row key for alerts_by_account, row key for alerts_recent).
+
+    The rule is part of both keys (contract, section 5): one transaction that
+    matches two rules gives two alerts with the same account and timestamp, and
+    they must not overwrite each other.
+    """
     rev = reversed_timestamp(parse_event_time(alert["event_time"]))
     account = alert["nameOrig"]
     rule = alert["rule"]
 
-    key_by_account = "{}_{}".format(account, rev)          # contract
-    if rule_in_key:
-        # Optional: avoids overwriting when one transaction raises two alerts.
-        key_by_account += "_" + rule
-    key_recent = "{}_{}_{}".format(rev, account, rule)     # contract
+    key_by_account = "{}_{}_{}".format(account, rev, rule)
+    key_recent = "{}_{}_{}".format(rev, account, rule)
     return key_by_account.encode("utf-8"), key_recent.encode("utf-8")
 
 
@@ -74,7 +75,7 @@ def build_columns(alert):
     return columns
 
 
-def parse_record(raw_value, rule_in_key=False):
+def parse_record(raw_value):
     """Decode one Kafka message into (key1, key2, columns). Raises on bad input."""
     alert = json.loads(raw_value.decode("utf-8"))
     if not isinstance(alert, dict):
@@ -82,7 +83,7 @@ def parse_record(raw_value, rule_in_key=False):
     for field in ("rule", "nameOrig", "event_time"):
         if not alert.get(field):
             raise ValueError("Missing required field: {}".format(field))
-    key_by_account, key_recent = build_row_keys(alert, rule_in_key)
+    key_by_account, key_recent = build_row_keys(alert)
     return key_by_account, key_recent, build_columns(alert)
 
 
@@ -96,8 +97,6 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--idle-timeout", type=int, default=0,
                         help="stop after N seconds without messages (0 = run forever)")
-    parser.add_argument("--rule-in-key", action="store_true",
-                        help="append the rule to the alerts_by_account row key")
     return parser.parse_args()
 
 
@@ -143,8 +142,7 @@ def main():
                 for records in polled.values():
                     for record in records:
                         try:
-                            key_a, key_r, columns = parse_record(
-                                record.value, args.rule_in_key)
+                            key_a, key_r, columns = parse_record(record.value)
                         except (ValueError, KeyError, TypeError) as error:
                             skipped += 1
                             print("Skipped offset {}: {}".format(record.offset, error))

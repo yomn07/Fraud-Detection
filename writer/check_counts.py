@@ -50,8 +50,9 @@ def main():
     if kafka_count == by_account == recent:
         print("OK: counts match.")
     elif kafka_count == recent and by_account < recent:
-        print("KEY COLLISIONS in alerts_by_account: two alerts share the same "
-              "account and timestamp. Use --rule-in-key (see contracts.md).")
+        print("alerts_by_account has fewer rows than alerts_recent: it probably holds "
+              "rows written with the old key (without the rule). Drop both tables "
+              "(hbase/create_tables.txt), create them again and replay with a new --group-id.")
     else:
         print("MISMATCH: check skipped messages or writer lag.")
 
