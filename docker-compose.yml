@@ -28,6 +28,8 @@ services:
     environment:
       HBASE_HOST: hadoop-master
       HBASE_PORT: "9090"
+    volumes:
+      - ./results:/app/results:ro
     restart: unless-stopped
     networks:
       - hadoop
