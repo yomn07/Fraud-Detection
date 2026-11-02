@@ -20,6 +20,18 @@ services:
     networks:
       - hadoop
 
+  dashboard:
+    build: ./dashboard
+    container_name: fraud-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      HBASE_HOST: hadoop-master
+      HBASE_PORT: "9090"
+    restart: unless-stopped
+    networks:
+      - hadoop
+
 networks:
   hadoop:
     external: true
