@@ -1,0 +1,3 @@
+streamlit>=1.50
+happybase==1.3.0
+pandas>=2.0
