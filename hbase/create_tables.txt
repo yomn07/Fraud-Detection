@@ -1,0 +1,17 @@
+# HBase shell commands
+# Run with:  hbase shell /root/hbase/create_tables.txt
+
+create 'alerts_by_account', 'd'
+create 'alerts_recent', 'd'
+
+list
+describe 'alerts_by_account'
+describe 'alerts_recent'
+
+# To start from scratch (uncomment, then run again):
+# disable 'alerts_by_account'
+# drop 'alerts_by_account'
+# disable 'alerts_recent'
+# drop 'alerts_recent'
+
+exit
