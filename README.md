@@ -113,7 +113,6 @@ The interfaces between the three team members (topics, JSON formats, HBase row k
 | Alert writer to HBase | Done |
 | Dashboard | Done |
 | Evaluation (precision and recall) | Done (results in `docs/evaluation.md`) |
-| Pipeline throughput, alert latency, resilience test | Planned |
 
 ## Results so far
 
