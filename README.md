@@ -140,7 +140,7 @@ Senders almost never repeat, so a velocity rule counting per sender would never 
 
 ### Producer throughput
 
-50,000 events in 16.8 s, about 2,976 events per second, from a single Python process on one machine to one broker. The target rate was higher, so this is the ceiling of the Python producer, not of Kafka. More measurements are in [`docs/benchmarks.md`](docs/benchmarks.md).
+50,000 events in 16.8 s, about 2,976 events per second, from a single Python process on one machine to one broker. The target rate was higher, so this is the ceiling of the Python producer, not of Kafka. 
 
 ### Rule evaluation
 
@@ -445,7 +445,7 @@ The reversed timestamp makes the newest rows sort first, so a range scan returns
 
 | Member | Area |
 |---|---|
-| A: yomn07 | Kafka, producer, HDFS, MapReduce, benchmarks, contracts |
+| A: yomn07 | Kafka, producer, HDFS, MapReduce, contracts |
 | B: aicha | Spark Structured Streaming: archive job and rules |
 | C: ghassen | HBase, alert writer, dashboard, evaluation |
 
